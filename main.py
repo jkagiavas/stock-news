@@ -2,6 +2,7 @@ import requests
 import smtplib
 import os
 from dotenv import load_dotenv
+import time
 
 #from twilio.rest import Client
 #from gi.overrides.Gtk import stock_lookup
@@ -36,6 +37,46 @@ day_before_data = data_list[1]
 day_before_data_closing = day_before_data["4. close"]
 print(yesterday_data_closing)
 print(day_before_data_closing)
+
+# VOLUME SPIKE CHECK
+# Get yesterday's volume
+yesterday_volume = float(yesterday_data["5. volume"])
+
+# Calculate the average volume of the last 20 days
+last_20_days = data_list[:20]
+average_volume = sum(float(day["5. volume"]) for day in last_20_days) / len(last_20_days)
+
+# Compare - is yesterday's volume a spike?
+volume_ratio = yesterday_volume / average_volume
+print(f"Volume: {yesterday_volume:,.0f} vs average {average_volume:,.0f} ({volume_ratio:.1f}x)")
+
+# RSI CHECK
+rsi_params = {
+    "function": "RSI",
+    "symbol": STOCK_NAME,
+    "interval": "daily",
+    "time_period": 14,
+    "series_type": "close",
+    "apikey": STOCK_API_KEY
+}
+time.sleep(2)
+rsi_response = requests.get(STOCK_ENDPOINT, rsi_params)
+rsi_response.raise_for_status()
+rsi_data = rsi_response.json()["Technical Analysis: RSI"]
+
+# Get the most recent RSI value
+latest_rsi_date = list(rsi_data.keys())[0]
+latest_rsi = float(rsi_data[latest_rsi_date]["RSI"])
+
+# Interpret it
+if latest_rsi > 70:
+    rsi_signal = "OVERBOUGHT - possible pullback"
+elif latest_rsi < 30:
+    rsi_signal = "OVERSOLD - possible recovery"
+else:
+    rsi_signal = "NEUTRAL"
+
+print(f"RSI: {latest_rsi:.1f} ({rsi_signal})")
 differ = abs(float(yesterday_data_closing)-float(day_before_data_closing))
 diff_percent = (differ/float(yesterday_data_closing)*100)
 print(f"{round(diff_percent, 2)}%")
@@ -55,10 +96,12 @@ if differ > 0:
 
     formated_articles = [f"Headline: {article['title']}. \nBrief: {article['description']}" for article in three_articles]
     print(formated_articles)
-    #TODO 9. - Send each article as a separate message via Twilio.
-  #  client = Client(TWILLIO_SID, TWILLIO_AUTH_TOKEN)
 
-
+    summary = f"""{STOCK_NAME} moved {round(diff_percent, 2)}%
+    Volume: {volume_ratio:.1f}x average ({'HIGH - strong signal' if volume_ratio > 1.5 else 'normal'})
+    RSI: {latest_rsi:.1f} ({rsi_signal})
+    """
+    # Send one email per article (the loop stays)
     for article in formated_articles:
         with smtplib.SMTP("smtp.gmail.com") as connection:
             connection.starttls()
@@ -66,7 +109,9 @@ if differ > 0:
             connection.sendmail(
                 from_addr=MY_EMAIL,
                 to_addrs="jkayabas@gmail.com",
-                msg=f"Subject: Tesla stock \n\n {article}")
+                msg=f"Subject: {STOCK_NAME} Alert: {round(diff_percent, 2)}% move\n\n{summary}\n{article}".encode(
+                    'utf-8')
+            )
 
 """
 TSLA: 🔺2%
