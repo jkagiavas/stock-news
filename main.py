@@ -88,13 +88,18 @@ if differ > 0:
     response_news = requests.get(NEWS_ENDPOINT, news_params)
 
     articles = response_news.json()["articles"]
+    articles_with_brief = [article for article in articles if article["description"] is not None]
+
+    three_articles = articles_with_brief[:3]
     print(articles)
-    three_articles = articles[:3]
 
     ## STEP 3: Use twilio.com/docs/sms/quickstart/python
     #to send a separate message with each article's title and description to your phone number. 
 
-    formated_articles = [f"Headline: {article['title']}. \nBrief: {article['description']}" for article in three_articles]
+    formated_articles = [
+        f"Headline: {article['title']}\nBrief: {article['description']}\nLink: {article['url']}"
+        for article in three_articles
+    ]
     print(formated_articles)
 
     summary = f"""{STOCK_NAME} moved {round(diff_percent, 2)}%
